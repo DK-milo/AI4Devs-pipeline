@@ -186,6 +186,16 @@ jobs:
           set -e
           
           echo "Starting deployment process..."
+          echo "Current user: \$(whoami)"
+          echo "EC2_USER variable: \$EC2_USER"
+          
+          # Validate EC2_USER is set
+          if [ -z "\$EC2_USER" ]; then
+            echo "ERROR: EC2_USER environment variable is not set!"
+            exit 1
+          fi
+          
+          echo "Will run npm operations as user: \$EC2_USER"
           
           # Stop the current application (ignore if not running)
           sudo systemctl stop backend-app 2>/dev/null || true
@@ -291,4 +301,4 @@ jobs:
           scp -i ~/.ssh/ec2_key -o StrictHostKeyChecking=no deploy.sh "$USER@$HOST:/tmp/"
           
           # Execute deployment
-          ssh -i ~/.ssh/ec2_key -o StrictHostKeyChecking=no "$USER@$HOST" "chmod +x /tmp/deploy.sh && cd /tmp/backend && /tmp/deploy.sh"
+          ssh -i ~/.ssh/ec2_key -o StrictHostKeyChecking=no "$USER@$HOST" "export EC2_USER=$USER && chmod +x /tmp/deploy.sh && cd /tmp/backend && /tmp/deploy.sh"
