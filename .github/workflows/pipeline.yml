@@ -121,14 +121,17 @@ jobs:
           EC2_INSTANCE: ${{ secrets.EC2_INSTANCE }}
           EC2_USER: ${{ secrets.EC2_USER }}
         run: |
-          # Debug: Show what we're working with
-          echo "EC2_INSTANCE: $EC2_INSTANCE"
-          echo "EC2_USER: $EC2_USER"
+          # Debug: Show what we're working with (without revealing secrets)
+          echo "EC2_INSTANCE length: ${#EC2_INSTANCE}"
+          echo "EC2_USER length: ${#EC2_USER}"
+          echo "EC2_INSTANCE contains @: $(echo "$EC2_INSTANCE" | grep -c '@' || echo '0')"
+          echo "EC2_INSTANCE contains : $(echo "$EC2_INSTANCE" | grep -c ':' || echo '0')"
           echo "SSH key exists: $(ls -la ~/.ssh/ec2_key)"
+          echo "SSH key size: $(wc -c < ~/.ssh/ec2_key) bytes"
           
-          # Test SSH connection first
+          # Test SSH connection with verbose output
           echo "Testing SSH connection..."
-          ssh -i ~/.ssh/ec2_key -o StrictHostKeyChecking=no -o ConnectTimeout=10 \$EC2_USER@\$EC2_INSTANCE "echo 'SSH connection successful'"
+          ssh -v -i ~/.ssh/ec2_key -o StrictHostKeyChecking=no -o ConnectTimeout=10 \$EC2_USER@\$EC2_INSTANCE "echo 'SSH connection successful'" 2>&1 | head -20
           
           # Create deployment script
           cat > deploy.sh << EOF
