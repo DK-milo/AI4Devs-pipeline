@@ -1,229 +1,174 @@
-name: Backend CI/CD Pipeline
+name: Backend Pipeline
 
 on:
   push:
-    branches-ignore:
-      - main
-      - master
-  pull_request:
-    types: [opened, synchronize, reopened]
-
-env:
-  NODE_VERSION: '18'
+    branches:
+      - '**'
+    paths-ignore:
+      - 'frontend/**'
+      - 'README.md'
+      - 'LICENSE.md'
 
 jobs:
-  # Job 1: Backend Tests
-  backend-tests:
+  test:
     name: Run Backend Tests
     runs-on: ubuntu-latest
     
-    services:
-      postgres:
-        image: postgres:15
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: password
-          POSTGRES_DB: testdb
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-        ports:
-          - 5432:5432
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
+        
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: ${{ env.NODE_VERSION }}
+          node-version: '18'
           cache: 'npm'
-          cache-dependency-path: 'backend/package-lock.json'
-
-      - name: Install backend dependencies
+          cache-dependency-path: backend/package-lock.json
+          
+      - name: Install dependencies
         working-directory: ./backend
         run: npm ci
-
-      - name: Setup test environment
-        working-directory: ./backend
-        run: |
-          echo "DATABASE_URL=postgresql://postgres:password@localhost:5432/testdb" > .env.test
-          echo "NODE_ENV=test" >> .env.test
-
-      - name: Generate Prisma client
-        working-directory: ./backend
-        run: npx prisma generate
-
-      - name: Run database migrations
-        working-directory: ./backend
-        run: npx prisma migrate deploy
-        env:
-          DATABASE_URL: postgresql://postgres:password@localhost:5432/testdb
-
-      - name: Run backend tests
+        
+      - name: Run tests
         working-directory: ./backend
         run: npm test
-        env:
-          DATABASE_URL: postgresql://postgres:password@localhost:5432/testdb
-          NODE_ENV: test
-
+        
       - name: Upload test results
         uses: actions/upload-artifact@v4
         if: always()
         with:
           name: test-results
-          path: |
-            backend/coverage/
-            backend/test-results.xml
+          path: backend/coverage/
           retention-days: 7
 
-  # Job 2: Build Backend
-  build-backend:
+  build:
     name: Build Backend
     runs-on: ubuntu-latest
-    needs: backend-tests
+    needs: test
     
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
+        
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: ${{ env.NODE_VERSION }}
+          node-version: '18'
           cache: 'npm'
-          cache-dependency-path: 'backend/package-lock.json'
-
-      - name: Install backend dependencies
+          cache-dependency-path: backend/package-lock.json
+          
+      - name: Install dependencies
         working-directory: ./backend
         run: npm ci
-
+        
       - name: Generate Prisma client
         working-directory: ./backend
-        run: npx prisma generate
-
-      - name: Build backend
+        run: npm run prisma:generate
+        
+      - name: Build application
         working-directory: ./backend
         run: npm run build
-
-      - name: Create deployment package
-        working-directory: ./backend
-        run: |
-          # Create deployment directory
-          mkdir -p deploy
-          
-          # Copy built files
-          cp -r dist/ deploy/
-          cp package*.json deploy/
-          cp prisma/ deploy/ -r
-          
-          # Copy environment template
-          cp .env.example deploy/.env 2>/dev/null || echo "No .env.example found"
-          
-          # Create deployment archive
-          tar -czf ../backend-deploy.tar.gz -C deploy .
-
+        
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: backend-build
-          path: backend-deploy.tar.gz
-          retention-days: 30
+          path: backend/dist/
+          retention-days: 1
 
-  # Job 3: Deploy to EC2
-  deploy-ec2:
+  deploy:
     name: Deploy to EC2
     runs-on: ubuntu-latest
-    needs: [backend-tests, build-backend]
-    environment: production
+    needs: [test, build]
+    if: github.event_name == 'push' && github.ref != 'refs/heads/main'
     
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
       - name: Download build artifacts
         uses: actions/download-artifact@v4
         with:
           name: backend-build
-
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+          path: backend/dist/
+          
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION || 'us-east-1' }}
-
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+          
+      - name: Install dependencies
+        working-directory: ./backend
+        run: npm ci --only=production
+        
+              - name: Configure AWS credentials
+          uses: aws-actions/configure-aws-credentials@v4
+          with:
+            aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+            aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+            aws-region: us-east-2
+          
       - name: Deploy to EC2
         env:
-          EC2_HOST: ${{ secrets.EC2_HOST }}
-          EC2_USER: ${{ secrets.EC2_USER || 'ec2-user' }}
-          EC2_KEY: ${{ secrets.EC2_PRIVATE_KEY }}
-          APP_NAME: ${{ secrets.APP_NAME || 'ai4devs-backend' }}
+          EC2_INSTANCE: ${{ secrets.EC2_INSTANCE }}
+          EC2_USER: ${{ secrets.EC2_USER }}
+          EC2_PRIVATE_KEY: ${{ secrets.EC2_PRIVATE_KEY }}
         run: |
-          # Setup SSH
-          echo "$EC2_KEY" > private_key.pem
-          chmod 600 private_key.pem
+          # Create deployment script
+          cat > deploy.sh << 'EOF'
+          #!/bin/bash
+          set -e
           
-          # Copy deployment package to EC2
-          scp -i private_key.pem -o StrictHostKeyChecking=no \
-            backend-deploy.tar.gz $EC2_USER@$EC2_HOST:/tmp/
+          # Stop the current application
+          sudo systemctl stop backend-app || true
           
-          # Deploy on EC2
-          ssh -i private_key.pem -o StrictHostKeyChecking=no $EC2_USER@$EC2_HOST << 'EOF'
-            set -e
-            
-            # Create app directory if it doesn't exist
-            sudo mkdir -p /opt/$APP_NAME
-            sudo chown $USER:$USER /opt/$APP_NAME
-            
-            # Stop existing application
-            pm2 stop $APP_NAME || true
-            pm2 delete $APP_NAME || true
-            
-            # Extract new deployment
-            cd /opt/$APP_NAME
-            rm -rf * || true
-            tar -xzf /tmp/backend-deploy.tar.gz
-            
-            # Install production dependencies
-            npm ci --only=production
-            
-            # Setup environment variables (you should customize this)
-            if [ ! -f .env ]; then
-              echo "DATABASE_URL=$DATABASE_URL" > .env
-              echo "PORT=3010" >> .env
-              echo "NODE_ENV=production" >> .env
-            fi
-            
-            # Run database migrations
-            npx prisma migrate deploy
-            
-            # Start application with PM2
-            pm2 start dist/index.js --name $APP_NAME
-            pm2 save
-            
-            # Cleanup
-            rm /tmp/backend-deploy.tar.gz
+          # Create backup of current version
+          sudo cp -r /opt/backend /opt/backend.backup.$(date +%Y%m%d_%H%M%S) || true
+          
+          # Copy new files
+          sudo rm -rf /opt/backend
+          sudo mkdir -p /opt/backend
+          sudo cp -r * /opt/backend/
+          
+          # Set proper permissions
+          sudo chown -R $EC2_USER:$EC2_USER /opt/backend
+          sudo chmod +x /opt/backend/dist/index.js
+          
+          # Install production dependencies
+          cd /opt/backend
+          npm ci --only=production
+          
+          # Generate Prisma client
+          npx prisma generate
+          
+          # Start the application
+          sudo systemctl start backend-app
+          
+          # Check if service is running
+          sudo systemctl is-active --quiet backend-app
+          if [ $? -eq 0 ]; then
+            echo "Deployment successful!"
+          else
+            echo "Deployment failed! Rolling back..."
+            sudo systemctl stop backend-app
+            sudo rm -rf /opt/backend
+            sudo mv /opt/backend.backup.* /opt/backend
+            sudo systemctl start backend-app
+            exit 1
+          fi
           EOF
           
-          # Cleanup local SSH key
-          rm private_key.pem
-
-      - name: Health check
-        env:
-          EC2_HOST: ${{ secrets.EC2_HOST }}
-        run: |
-          # Wait for application to start
-          sleep 30
+          # Copy files to EC2
+          scp -i ~/.ssh/ec2_key -o StrictHostKeyChecking=no -r backend/* $EC2_USER@$EC2_INSTANCE:/tmp/backend/
+          scp -i ~/.ssh/ec2_key -o StrictHostKeyChecking=no deploy.sh $EC2_USER@$EC2_INSTANCE:/tmp/
           
-          # Simple health check
-          curl -f http://$EC2_HOST:3010/health || curl -f http://$EC2_HOST:3010/ || {
-            echo "Health check failed"
-            exit 1
-          }
-
-      - name: Notify deployment success
-        if: success()
+          # Execute deployment
+          ssh -i ~/.ssh/ec2_key -o StrictHostKeyChecking=no $EC2_USER@$EC2_INSTANCE "chmod +x /tmp/deploy.sh && cd /tmp/backend && /tmp/deploy.sh"
+          
+      - name: Create SSH key
         run: |
-          echo "✅ Deployment successful!"
-          echo "Backend deployed to: http://${{ secrets.EC2_HOST }}:3010"
+          mkdir -p ~/.ssh
+          echo "$EC2_PRIVATE_KEY" > ~/.ssh/ec2_key
+          chmod 600 ~/.ssh/ec2_key

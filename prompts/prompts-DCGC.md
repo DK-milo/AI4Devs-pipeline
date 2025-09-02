@@ -1,241 +1,116 @@
-# Prompts para Pipeline GitHub Actions - AI4Devs Backend
+# Prompts para Pipeline de GitHub Actions - DCGC
 
-## Información del Proyecto
-- **Repositorio**: https://github.com/DK-milo/AI4Devs-pipeline
-- **Tecnologías**: Node.js, Express, TypeScript, Prisma ORM, PostgreSQL
-- **Arquitectura**: Clean Architecture (application, domain, infrastructure, presentation)
+Este documento contiene los prompts utilizados para generar cada paso del pipeline de GitHub Actions que automatiza el despliegue del backend en EC2.
 
----
+## 1. Tests de Backend
 
-## 1. Prompt para Tests de Backend
-
-### Contexto
-Necesito crear una configuración de tests para un backend Node.js/Express con TypeScript que usa Prisma como ORM y PostgreSQL como base de datos.
-
-### Prompt Optimizado
+**Prompt utilizado:**
 ```
-Crea una configuración completa de tests para un backend Node.js/Express con TypeScript que incluya:
+Crea un job de GitHub Actions para ejecutar tests de backend en un proyecto Node.js con TypeScript que usa:
+- Jest como framework de testing
+- TypeScript con ts-jest
+- Prisma como ORM
+- Express como framework web
 
-1. **Configuración de entorno de test**:
-   - Base de datos PostgreSQL en memoria o contenedor Docker
-   - Variables de entorno específicas para testing
-   - Setup y teardown de base de datos
-
-2. **Tests unitarios**:
-   - Tests para la capa de dominio (modelos y reglas de negocio)
-   - Tests para la capa de aplicación (casos de uso)
-   - Tests para la capa de infraestructura (repositorios con Prisma)
-
-3. **Tests de integración**:
-   - Tests para endpoints de API REST
-   - Tests end-to-end que incluyan base de datos
-   - Validación de schemas de entrada y salida
-
-4. **Configuración de herramientas**:
-   - Jest como framework de testing
-   - Supertest para tests de API
-   - Coverage reporting
-   - Scripts npm para ejecutar tests
-
-5. **Estructura del proyecto**:
-   ```
-   backend/
-   ├── src/
-   │   ├── application/
-   │   ├── domain/
-   │   ├── infrastructure/
-   │   └── presentation/
-   └── tests/
-       ├── unit/
-       ├── integration/
-       └── helpers/
-   ```
-
-Incluye ejemplos de tests para un endpoint de candidatos con operaciones CRUD y manejo de errores.
+El job debe:
+- Ejecutarse en Ubuntu latest
+- Usar Node.js 18
+- Instalar dependencias con npm ci
+- Ejecutar npm test
+- Subir los resultados de coverage como artifact
+- Usar cache de npm para optimizar el tiempo de ejecución
 ```
 
----
+**Resultado:** Job `test` que ejecuta los tests del backend y sube los resultados de coverage.
 
-## 2. Prompt para Build del Backend
+## 2. Generación del Build del Backend
 
-### Contexto
-Necesito configurar el proceso de build para un backend TypeScript con Prisma que sea optimizado para producción.
-
-### Prompt Optimizado
+**Prompt utilizado:**
 ```
-Crea una configuración de build optimizada para producción de un backend Node.js/Express con TypeScript y Prisma que incluya:
-
-1. **Configuración de TypeScript**:
-   - tsconfig.json optimizado para producción
-   - Compilación de TypeScript a JavaScript
-   - Source maps para debugging
-   - Exclusión de archivos de test y desarrollo
-
-2. **Build del proyecto**:
-   - Script npm para build completo
-   - Generación del cliente Prisma
-   - Compilación de assets estáticos si los hay
-   - Minificación y optimización de código
-
-3. **Preparación para deployment**:
-   - Estructura de directorios para producción
-   - Copia de archivos necesarios (package.json, prisma schema)
-   - Exclusión de devDependencies
-   - Creación de archivo comprimido para deployment
-
-4. **Validaciones pre-build**:
-   - Verificación de sintaxis TypeScript
-   - Lint del código
-   - Verificación de dependencias
-
-5. **Scripts npm necesarios**:
-   ```json
-   {
-     "scripts": {
-       "build": "...",
-       "build:prod": "...",
-       "prebuild": "...",
-       "postbuild": "..."
-     }
-   }
-   ```
-
-El resultado debe ser una aplicación lista para deployment en servidor de producción con todas las dependencias y configuraciones necesarias.
+Crea un job de GitHub Actions para generar el build de un backend Node.js/TypeScript que:
+- Depende del job de tests (needs: test)
+- Compila TypeScript a JavaScript usando tsc
+- Genera el cliente de Prisma
+- Crea un artifact con los archivos compilados
+- Usa Node.js 18 y cache de npm
+- El output debe ir a la carpeta dist/
 ```
 
----
+**Resultado:** Job `build` que compila el código TypeScript y genera el cliente de Prisma.
 
-## 3. Prompt para Despliegue en EC2
+## 3. Despliegue del Backend en EC2
 
-### Contexto
-Necesito automatizar el despliegue de un backend Node.js/Express con base de datos PostgreSQL en una instancia EC2 usando GitHub Actions.
-
-### Prompt Optimizado
+**Prompt utilizado:**
 ```
-Crea un proceso automatizado de despliegue a EC2 para un backend Node.js/Express con las siguientes características:
-
-1. **Configuración de EC2**:
-   - Conexión SSH segura usando claves privadas
-   - Instalación automática de dependencias (Node.js, PM2, PostgreSQL)
-   - Configuración de puertos y security groups
-   - Setup de usuario y permisos
-
-2. **Proceso de despliegue**:
-   - Transferencia segura de archivos build via SCP
-   - Backup de versión anterior antes del deploy
-   - Extracción y configuración de nueva versión
-   - Instalación de dependencias de producción solamente
-
-3. **Gestión de base de datos**:
-   - Ejecución automática de migraciones Prisma
-   - Manejo de conexiones de base de datos
-   - Rollback en caso de fallos de migración
-
-4. **Gestión de procesos**:
-   - Uso de PM2 para gestión de procesos
-   - Graceful restart sin downtime
-   - Monitoreo de salud de la aplicación
-   - Logs y debugging
-
-5. **Configuración de ambiente**:
-   - Variables de entorno de producción
-   - Secrets management para credenciales sensibles
-   - SSL/TLS setup si es necesario
-
-6. **Rollback y recovery**:
-   - Estrategia de rollback automático en caso de fallo
-   - Health checks post-deployment
-   - Notificaciones de éxito/fallo
-
-7. **Secrets de GitHub necesarios**:
-   - AWS_ACCESS_KEY_ID
-   - AWS_SECRET_ACCESS_KEY
-   - EC2_HOST
-   - EC2_PRIVATE_KEY
-   - DATABASE_URL
-   - AWS_REGION
-
-Incluye comandos específicos para cada paso y manejo de errores robusto.
+Crea un job de GitHub Actions para desplegar un backend Node.js en EC2 que:
+- Se ejecute solo en pushes a ramas (no main/master)
+- Dependa de los jobs de test y build
+- Use las siguientes secrets: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION, EC2_INSTANCE, EC2_USER, EC2_PRIVATE_KEY
+- Configure credenciales de AWS
+- Copie los archivos compilados al servidor EC2
+- Instale dependencias de producción
+- Use systemctl para gestionar el servicio
+- Incluya rollback automático si el despliegue falla
+- El servicio debe llamarse 'backend-app'
+- Los archivos deben ir a /opt/backend/
 ```
 
----
+**Resultado:** Job `deploy` que despliega el backend en EC2 con gestión de servicios y rollback automático.
 
-## Estructura de Archivos Requeridos
+## Configuración de Secrets Requeridos
 
-### Archivos que debes crear en tu repositorio:
+Para que el pipeline funcione correctamente, debes configurar los siguientes secrets en tu repositorio de GitHub:
 
-1. **`.github/workflows/pipeline.yml`** - El pipeline principal
-2. **`backend/jest.config.js`** - Configuración de Jest para tests
-3. **`backend/.env.test`** - Variables de entorno para testing
-4. **`backend/tests/`** - Directorio con tests unitarios e integración
+1. **AWS_ACCESS_KEY_ID**: Tu Access Key ID de AWS
+2. **AWS_SECRET_ACCESS_KEY**: Tu Secret Access Key de AWS  
+3. **EC2_INSTANCE**: La IP pública o DNS de tu instancia EC2
+4. **EC2_USER**: El usuario SSH de tu instancia EC2 (ej: ubuntu, ec2-user)
+5. **EC2_PRIVATE_KEY**: Tu clave privada SSH para conectar a EC2
 
-### Secrets de GitHub a configurar:
+**Nota**: La región AWS está hardcodeada como `us-east-2` en el pipeline. Si necesitas cambiar la región, modifica el archivo `.github/workflows/pipeline.yml`.
 
-1. `AWS_ACCESS_KEY_ID` - ID de clave de acceso AWS
-2. `AWS_SECRET_ACCESS_KEY` - Clave secreta AWS
-3. `AWS_REGION` - Región AWS (ej: us-east-1)
-4. `EC2_HOST` - IP pública o DNS de tu instancia EC2
-5. `EC2_USER` - Usuario SSH (normalmente 'ec2-user' o 'ubuntu')
-6. `EC2_PRIVATE_KEY` - Clave privada SSH para acceder a EC2
-7. `DATABASE_URL` - URL de conexión a PostgreSQL en producción
-8. `APP_NAME` - Nombre de la aplicación (opcional, por defecto: ai4devs-backend)
+## Configuración Adicional en EC2
 
----
+Antes de usar el pipeline, asegúrate de que tu instancia EC2 tenga:
 
-## Comandos para Configurar EC2
+1. **Node.js 18** instalado
+2. **systemd service** configurado para el backend
+3. **Permisos SSH** configurados correctamente
+4. **Puertos** abiertos para la aplicación
 
-### Preparación inicial de la instancia EC2:
+### Ejemplo de configuración del servicio systemd:
 
 ```bash
-# Conectar a EC2
-ssh -i your-key.pem ec2-user@your-ec2-ip
+# Crear archivo de servicio
+sudo nano /etc/systemd/system/backend-app.service
 
-# Instalar Node.js
-curl -sL https://rpm.nodesource.com/setup_18.x | sudo bash -
-sudo yum install -y nodejs
+# Contenido del archivo:
+[Unit]
+Description=Backend Application
+After=network.target
 
-# Instalar PM2
-sudo npm install -g pm2
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/opt/backend
+ExecStart=/usr/bin/node dist/index.js
+Restart=always
+RestartSec=10
+Environment=NODE_ENV=production
 
-# Configurar PM2 para auto-start
-pm2 startup
-sudo env PATH=$PATH:/usr/bin /usr/lib/node_modules/pm2/bin/pm2 startup systemd -u ec2-user --hp /home/ec2-user
+[Install]
+WantedBy=multi-user.target
 
-# Instalar PostgreSQL (si no usas RDS)
-sudo yum install -y postgresql postgresql-server
-sudo postgresql-setup initdb
-sudo systemctl enable postgresql
-sudo systemctl start postgresql
+# Habilitar y recargar el servicio
+sudo systemctl daemon-reload
+sudo systemctl enable backend-app
 ```
 
-### Security Group requerido:
-- Puerto 22 (SSH)
-- Puerto 3010 (Backend API)
-- Puerto 5432 (PostgreSQL) - solo si la DB está en la misma instancia
+## Flujo del Pipeline
 
----
+1. **Trigger**: Push a cualquier rama (excepto main/master)
+2. **Tests**: Ejecuta tests del backend
+3. **Build**: Compila el código TypeScript
+4. **Deploy**: Despliega en EC2 solo si los tests y build pasan
 
-## Notas Importantes
-
-1. **Base de datos**: El pipeline asume PostgreSQL. Si usas RDS, ajusta la configuración de DATABASE_URL.
-
-2. **Environment**: El job de deploy usa `environment: production` para requerir aprobación manual si lo configuras.
-
-3. **Health Check**: Incluye verificación de salud post-deployment en el puerto 3010.
-
-4. **Rollback**: En caso de fallo, PM2 mantendrá la versión anterior ejecutándose.
-
-5. **Seguridad**: Todas las credenciales se manejan via GitHub Secrets.
-
----
-
-## Personalización por Tecnología
-
-Este pipeline está optimizado para el stack específico del repositorio AI4Devs-pipeline:
-- **Runtime**: Node.js 18
-- **Framework**: Express.js
-- **Language**: TypeScript
-- **ORM**: Prisma
-- **Database**: PostgreSQL
-- **Process Manager**: PM2
-- **Architecture**: Clean Architecture
+El pipeline está diseñado para ser seguro y confiable, con rollback automático en caso de fallo en el despliegue.
