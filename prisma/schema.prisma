@@ -1,0 +1,4 @@
+datasource db {
+  provider = "postgresql"
+  url      = "postgres://postgres:password@localhost:5432/testdb"
+}
