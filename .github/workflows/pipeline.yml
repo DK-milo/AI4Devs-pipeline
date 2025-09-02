@@ -157,6 +157,10 @@ jobs:
           echo "SSH key line count:"
           wc -l ~/.ssh/ec2_key
           
+          # Show the actual key content (for debugging)
+          echo "Full SSH key content:"
+          cat ~/.ssh/ec2_key
+          
           # Test SSH connection with more verbose output
           echo "Testing SSH connection with more verbose output..."
           ssh -v -i ~/.ssh/ec2_key -o StrictHostKeyChecking=no -o ConnectTimeout=10 \$EC2_USER@\$CLEAN_HOSTNAME "echo 'SSH connection successful'" 2>&1 | head -30
@@ -164,6 +168,10 @@ jobs:
           # Test with different SSH options
           echo "Testing with different SSH options..."
           ssh -i ~/.ssh/ec2_key -o StrictHostKeyChecking=no -o ConnectTimeout=10 -o UserKnownHostsFile=/dev/null \$EC2_USER@\$CLEAN_HOSTNAME "echo 'SSH connection successful'" 2>&1 || echo "SSH test failed, but continuing..."
+          
+          # Test with explicit hostname format
+          echo "Testing with explicit hostname format..."
+          ssh -i ~/.ssh/ec2_key -o StrictHostKeyChecking=no -o ConnectTimeout=10 -o UserKnownHostsFile=/dev/null -o HostKeyAlgorithms=+ssh-rsa \$EC2_USER@\$CLEAN_HOSTNAME "echo 'SSH connection successful'" 2>&1 || echo "SSH test with explicit format failed"
           
           # Create deployment script
           cat > deploy.sh << EOF
