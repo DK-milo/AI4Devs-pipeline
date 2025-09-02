@@ -121,6 +121,10 @@ jobs:
           EC2_INSTANCE: ${{ secrets.EC2_INSTANCE }}
           EC2_USER: ${{ secrets.EC2_USER }}
         run: |
+          # Extract hostname from EC2_INSTANCE (remove any port or protocol)
+          HOSTNAME=\$(echo "\$EC2_INSTANCE" | sed 's/^.*@//' | sed 's/:.*$//')
+          echo "Using hostname: \$HOSTNAME"
+          
           # Create deployment script
           cat > deploy.sh << EOF
           #!/bin/bash
@@ -201,8 +205,8 @@ jobs:
           EOF
           
           # Copy files to EC2
-          scp -i ~/.ssh/ec2_key -o StrictHostKeyChecking=no -r backend/* \$EC2_USER@\$EC2_INSTANCE:/tmp/backend/
-          scp -i ~/.ssh/ec2_key -o StrictHostKeyChecking=no deploy.sh \$EC2_USER@\$EC2_INSTANCE:/tmp/
+          scp -i ~/.ssh/ec2_key -o StrictHostKeyChecking=no -r backend/* \$EC2_USER@\$HOSTNAME:/tmp/backend/
+          scp -i ~/.ssh/ec2_key -o StrictHostKeyChecking=no deploy.sh \$EC2_USER@\$HOSTNAME:/tmp/
           
           # Execute deployment
-          ssh -i ~/.ssh/ec2_key -o StrictHostKeyChecking=no \$EC2_USER@\$EC2_INSTANCE "chmod +x /tmp/deploy.sh && cd /tmp/backend && /tmp/deploy.sh"
+          ssh -i ~/.ssh/ec2_key -o StrictHostKeyChecking=no \$EC2_USER@\$HOSTNAME "chmod +x /tmp/deploy.sh && cd /tmp/backend && /tmp/deploy.sh"
