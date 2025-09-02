@@ -110,18 +110,18 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: us-east-2
           
-       - name: Create SSH key
-         run: |
-           mkdir -p ~/.ssh
-           echo "${{ secrets.EC2_PRIVATE_KEY }}" > ~/.ssh/ec2_key
-           chmod 600 ~/.ssh/ec2_key
-           
-           # Debug: Check the SSH key
-           echo "SSH key created successfully"
-           echo "SSH key permissions: $(ls -la ~/.ssh/ec2_key)"
-           echo "SSH key size: $(wc -c < ~/.ssh/ec2_key) bytes"
-           echo "SSH key lines: $(wc -l < ~/.ssh/ec2_key)"
-           echo "SSH key first line: $(head -1 ~/.ssh/ec2_key)"
+      - name: Create SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_PRIVATE_KEY }}" > ~/.ssh/ec2_key
+          chmod 600 ~/.ssh/ec2_key
+          
+          # Debug: Check the SSH key
+          echo "SSH key created successfully"
+          echo "SSH key permissions: $(ls -la ~/.ssh/ec2_key)"
+          echo "SSH key size: $(wc -c < ~/.ssh/ec2_key) bytes"
+          echo "SSH key lines: $(wc -l < ~/.ssh/ec2_key)"
+          echo "SSH key first line: $(head -1 ~/.ssh/ec2_key)"
           
       - name: Deploy to EC2
         env:
