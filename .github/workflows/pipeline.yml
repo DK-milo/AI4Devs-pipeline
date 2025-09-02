@@ -163,15 +163,22 @@ jobs:
           
           # Test SSH connection with more verbose output
           echo "Testing SSH connection with more verbose output..."
-          ssh -v -i ~/.ssh/ec2_key -o StrictHostKeyChecking=no -o ConnectTimeout=10 \$EC2_USER@\$CLEAN_HOSTNAME "echo 'SSH connection successful'" 2>&1 | head -30
+          
+          # Try with explicit hostname variable
+          HOST="$CLEAN_HOSTNAME"
+          USER="$EC2_USER"
+          echo "Using HOST: $HOST"
+          echo "Using USER: $USER"
+          
+          ssh -v -i ~/.ssh/ec2_key -o StrictHostKeyChecking=no -o ConnectTimeout=10 "$USER@$HOST" "echo 'SSH connection successful'" 2>&1 | head -30
           
           # Test with different SSH options
           echo "Testing with different SSH options..."
-          ssh -i ~/.ssh/ec2_key -o StrictHostKeyChecking=no -o ConnectTimeout=10 -o UserKnownHostsFile=/dev/null \$EC2_USER@\$CLEAN_HOSTNAME "echo 'SSH connection successful'" 2>&1 || echo "SSH test failed, but continuing..."
+          ssh -i ~/.ssh/ec2_key -o StrictHostKeyChecking=no -o ConnectTimeout=10 -o UserKnownHostsFile=/dev/null "$USER@$HOST" "echo 'SSH connection successful'" 2>&1 || echo "SSH test failed, but continuing..."
           
           # Test with explicit hostname format
           echo "Testing with explicit hostname format..."
-          ssh -i ~/.ssh/ec2_key -o StrictHostKeyChecking=no -o ConnectTimeout=10 -o UserKnownHostsFile=/dev/null -o HostKeyAlgorithms=+ssh-rsa \$EC2_USER@\$CLEAN_HOSTNAME "echo 'SSH connection successful'" 2>&1 || echo "SSH test with explicit format failed"
+          ssh -i ~/.ssh/ec2_key -o StrictHostKeyChecking=no -o ConnectTimeout=10 -o UserKnownHostsFile=/dev/null -o HostKeyAlgorithms=+ssh-rsa "$USER@$HOST" "echo 'SSH connection successful'" 2>&1 || echo "SSH test with explicit format failed"
           
           # Create deployment script
           cat > deploy.sh << EOF
@@ -253,8 +260,8 @@ jobs:
           EOF
           
           # Copy files to EC2
-          scp -i ~/.ssh/ec2_key -o StrictHostKeyChecking=no -r backend/* \$EC2_USER@\$CLEAN_HOSTNAME:/tmp/backend/
-          scp -i ~/.ssh/ec2_key -o StrictHostKeyChecking=no deploy.sh \$EC2_USER@\$CLEAN_HOSTNAME:/tmp/
+          scp -i ~/.ssh/ec2_key -o StrictHostKeyChecking=no -r backend/* "$USER@$HOST:/tmp/backend/"
+          scp -i ~/.ssh/ec2_key -o StrictHostKeyChecking=no deploy.sh "$USER@$HOST:/tmp/"
           
           # Execute deployment
-          ssh -i ~/.ssh/ec2_key -o StrictHostKeyChecking=no \$EC2_USER@\$CLEAN_HOSTNAME "chmod +x /tmp/deploy.sh && cd /tmp/backend && /tmp/deploy.sh"
+          ssh -i ~/.ssh/ec2_key -o StrictHostKeyChecking=no "$USER@$HOST" "chmod +x /tmp/deploy.sh && cd /tmp/backend && /tmp/deploy.sh"
