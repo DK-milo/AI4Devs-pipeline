@@ -116,78 +116,25 @@ jobs:
           echo "${{ secrets.EC2_PRIVATE_KEY }}" > ~/.ssh/ec2_key
           chmod 600 ~/.ssh/ec2_key
           
-          # Debug: Check the SSH key
-          echo "SSH key created successfully"
-          echo "SSH key permissions: $(ls -la ~/.ssh/ec2_key)"
-          echo "SSH key size: $(wc -c < ~/.ssh/ec2_key) bytes"
-          echo "SSH key lines: $(wc -l < ~/.ssh/ec2_key)"
-          echo "SSH key first line: $(head -1 ~/.ssh/ec2_key)"
-          
       - name: Deploy to EC2
         env:
           EC2_INSTANCE: ${{ secrets.EC2_INSTANCE }}
           EC2_USER: ${{ secrets.EC2_USER }}
         run: |
-          # Debug: Show what we're working with (without revealing secrets)
-          echo "EC2_INSTANCE length: ${#EC2_INSTANCE}"
-          echo "EC2_USER length: ${#EC2_USER}"
-          echo "EC2_INSTANCE contains @: $(echo "$EC2_INSTANCE" | grep -c '@' || echo '0')"
-          echo "EC2_INSTANCE contains : $(echo "$EC2_INSTANCE" | grep -c ':' || echo '0')"
-          echo "SSH key exists: $(ls -la ~/.ssh/ec2_key)"
-          echo "SSH key size: $(wc -c < ~/.ssh/ec2_key) bytes"
-          
-          # Check for hidden characters
-          echo "EC2_INSTANCE hex dump:"
-          echo "$EC2_INSTANCE" | hexdump -C | head -5
-          
-          # Clean the hostname (remove any hidden characters)
+          # Clean the hostname
           CLEAN_HOSTNAME=$(printf '%s' "$EC2_INSTANCE" | tr -d '\r\n\t' | sed 's/[[:space:]]*$//' | sed 's/^[[:space:]]*//')
-          echo "CLEAN_HOSTNAME length: ${#CLEAN_HOSTNAME}"
-          echo "CLEAN_HOSTNAME hex dump:"
-          printf '%s' "$CLEAN_HOSTNAME" | hexdump -C | head -5
           
-          # Test SSH connection with clean hostname
-          echo "Testing SSH connection with clean hostname..."
-          
-          # Check SSH key format
-          echo "SSH key first line:"
-          head -1 ~/.ssh/ec2_key
-          echo "SSH key last line:"
-          tail -1 ~/.ssh/ec2_key
-          echo "SSH key line count:"
-          wc -l ~/.ssh/ec2_key
-          
-          # Show the actual key content (for debugging)
-          echo "Full SSH key content:"
-          cat ~/.ssh/ec2_key
-          
-          # Test SSH connection with more verbose output
-          echo "Testing SSH connection with more verbose output..."
-          
-          # Try with explicit hostname variable
+          # Set variables
           HOST="$CLEAN_HOSTNAME"
           USER="$EC2_USER"
-          echo "Using HOST: $HOST"
-          echo "Using USER: $USER"
           
-          ssh -v -i ~/.ssh/ec2_key -o StrictHostKeyChecking=no -o ConnectTimeout=10 "$USER@$HOST" "echo 'SSH connection successful'" 2>&1 | head -30
-          
-          # Test with different SSH options
-          echo "Testing with different SSH options..."
-          ssh -i ~/.ssh/ec2_key -o StrictHostKeyChecking=no -o ConnectTimeout=10 -o UserKnownHostsFile=/dev/null "$USER@$HOST" "echo 'SSH connection successful'" 2>&1 || echo "SSH test failed, but continuing..."
-          
-          # Test with explicit hostname format
-          echo "Testing with explicit hostname format..."
-          ssh -i ~/.ssh/ec2_key -o StrictHostKeyChecking=no -o ConnectTimeout=10 -o UserKnownHostsFile=/dev/null -o HostKeyAlgorithms=+ssh-rsa "$USER@$HOST" "echo 'SSH connection successful'" 2>&1 || echo "SSH test with explicit format failed"
+          # Test SSH connection
+          ssh -i ~/.ssh/ec2_key -o StrictHostKeyChecking=no -o ConnectTimeout=10 -o UserKnownHostsFile=/dev/null "$USER@$HOST" "echo 'SSH connection successful'" || exit 1
           
           # Create deployment script
           cat > deploy.sh << EOF
           #!/bin/bash
           set -e
-          
-          echo "Starting deployment process..."
-          echo "Current user: \$(whoami)"
-          echo "EC2_USER variable: \$EC2_USER"
           
           # Validate EC2_USER is set
           if [ -z "\$EC2_USER" ]; then
@@ -195,61 +142,47 @@ jobs:
             exit 1
           fi
           
-          echo "Will run npm operations as user: \$EC2_USER"
-          
-          # Stop the current application (ignore if not running)
+          # Stop the current application
           sudo systemctl stop backend-app 2>/dev/null || true
           
           # Create backup of current version if it exists
           if [ -d "/opt/backend" ]; then
-            echo "Creating backup of current version..."
             sudo cp -r /opt/backend /opt/backend.backup.\$(date +%Y%m%d_%H%M%S) || true
           fi
           
-          # Remove old backend directory if it exists
-          echo "Removing old backend directory..."
+          # Remove old backend directory
           sudo rm -rf /opt/backend 2>/dev/null || true
           
           # Create new backend directory with proper ownership
-          echo "Creating new backend directory..."
           sudo mkdir -p /opt/backend
           sudo chown \$EC2_USER:\$EC2_USER /opt/backend
           
           # Copy new files
-          echo "Copying new files..."
           sudo cp -r * /opt/backend/
           
           # Set proper permissions for all files
-          echo "Setting proper permissions..."
           sudo chown -R \$EC2_USER:\$EC2_USER /opt/backend
           sudo chmod +x /opt/backend/dist/index.js 2>/dev/null || true
           
-          # Clean up any existing node_modules with wrong permissions
-          echo "Cleaning up any existing node_modules..."
+          # Clean up any existing node_modules
           sudo rm -rf /opt/backend/node_modules 2>/dev/null || true
           
-          # Install production dependencies as the correct user
-          echo "Installing production dependencies..."
+          # Install production dependencies
           cd /opt/backend
-          
-          # Ensure we're running as the correct user
           if [ "\$(whoami)" != "\$EC2_USER" ]; then
-            echo "Warning: Not running as \$EC2_USER, switching user for npm operations"
             sudo -u \$EC2_USER npm ci --only=production --no-optional
           else
             npm ci --only=production --no-optional
           fi
           
-          # Generate Prisma client as the correct user
-          echo "Generating Prisma client..."
+          # Generate Prisma client
           if [ "\$(whoami)" != "\$EC2_USER" ]; then
             sudo -u \$EC2_USER npx prisma generate
           else
             npx prisma generate
           fi
           
-          # Create systemd service file if it doesn't exist
-          echo "Setting up systemd service..."
+          # Create systemd service file
           sudo tee /etc/systemd/system/backend-app.service > /dev/null << SERVICEEOF
           [Unit]
           Description=Backend Application
@@ -269,21 +202,18 @@ jobs:
           SERVICEEOF
           
           # Reload systemd and enable service
-          echo "Reloading systemd and enabling service..."
           sudo systemctl daemon-reload
           sudo systemctl enable backend-app
           
           # Start the application
-          echo "Starting the application..."
           sudo systemctl start backend-app
           
-          # Wait a moment for the service to start
+          # Wait for service to start
           sleep 5
           
           # Check if service is running
           if sudo systemctl is-active --quiet backend-app; then
             echo "Deployment successful!"
-            sudo systemctl status backend-app --no-pager
           else
             echo "Deployment failed! Rolling back..."
             sudo systemctl stop backend-app 2>/dev/null || true
