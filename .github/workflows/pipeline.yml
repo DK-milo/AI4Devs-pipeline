@@ -134,10 +134,10 @@ jobs:
           echo "$EC2_INSTANCE" | hexdump -C | head -5
           
           # Clean the hostname (remove any hidden characters)
-          CLEAN_HOSTNAME=$(echo "$EC2_INSTANCE" | tr -d '\r\n\t' | sed 's/[[:space:]]*$//' | sed 's/^[[:space:]]*//')
+          CLEAN_HOSTNAME=$(printf '%s' "$EC2_INSTANCE" | tr -d '\r\n\t' | sed 's/[[:space:]]*$//' | sed 's/^[[:space:]]*//')
           echo "CLEAN_HOSTNAME length: ${#CLEAN_HOSTNAME}"
           echo "CLEAN_HOSTNAME hex dump:"
-          echo "$CLEAN_HOSTNAME" | hexdump -C | head -5
+          printf '%s' "$CLEAN_HOSTNAME" | hexdump -C | head -5
           
           # Test SSH connection with clean hostname
           echo "Testing SSH connection with clean hostname..."
