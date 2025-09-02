@@ -129,9 +129,19 @@ jobs:
           echo "SSH key exists: $(ls -la ~/.ssh/ec2_key)"
           echo "SSH key size: $(wc -c < ~/.ssh/ec2_key) bytes"
           
-          # Test SSH connection with verbose output
-          echo "Testing SSH connection..."
-          ssh -v -i ~/.ssh/ec2_key -o StrictHostKeyChecking=no -o ConnectTimeout=10 \$EC2_USER@\$EC2_INSTANCE "echo 'SSH connection successful'" 2>&1 | head -20
+          # Check for hidden characters
+          echo "EC2_INSTANCE hex dump:"
+          echo "$EC2_INSTANCE" | hexdump -C | head -5
+          
+          # Clean the hostname (remove any hidden characters)
+          CLEAN_HOSTNAME=$(echo "$EC2_INSTANCE" | tr -d '\r\n\t' | sed 's/[[:space:]]*$//' | sed 's/^[[:space:]]*//')
+          echo "CLEAN_HOSTNAME length: ${#CLEAN_HOSTNAME}"
+          echo "CLEAN_HOSTNAME hex dump:"
+          echo "$CLEAN_HOSTNAME" | hexdump -C | head -5
+          
+          # Test SSH connection with clean hostname
+          echo "Testing SSH connection with clean hostname..."
+          ssh -v -i ~/.ssh/ec2_key -o StrictHostKeyChecking=no -o ConnectTimeout=10 \$EC2_USER@\$CLEAN_HOSTNAME "echo 'SSH connection successful'" 2>&1 | head -20
           
           # Create deployment script
           cat > deploy.sh << EOF
@@ -213,8 +223,8 @@ jobs:
           EOF
           
           # Copy files to EC2
-          scp -i ~/.ssh/ec2_key -o StrictHostKeyChecking=no -r backend/* \$EC2_USER@\$EC2_INSTANCE:/tmp/backend/
-          scp -i ~/.ssh/ec2_key -o StrictHostKeyChecking=no deploy.sh \$EC2_USER@\$EC2_INSTANCE:/tmp/
+          scp -i ~/.ssh/ec2_key -o StrictHostKeyChecking=no -r backend/* \$EC2_USER@\$CLEAN_HOSTNAME:/tmp/backend/
+          scp -i ~/.ssh/ec2_key -o StrictHostKeyChecking=no deploy.sh \$EC2_USER@\$CLEAN_HOSTNAME:/tmp/
           
           # Execute deployment
-          ssh -i ~/.ssh/ec2_key -o StrictHostKeyChecking=no \$EC2_USER@\$EC2_INSTANCE "chmod +x /tmp/deploy.sh && cd /tmp/backend && /tmp/deploy.sh"
+          ssh -i ~/.ssh/ec2_key -o StrictHostKeyChecking=no \$EC2_USER@\$CLEAN_HOSTNAME "chmod +x /tmp/deploy.sh && cd /tmp/backend && /tmp/deploy.sh"
