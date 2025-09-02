@@ -209,10 +209,10 @@ jobs:
           
           # Install production dependencies as the correct user
           cd /opt/backend
-          sudo -u \$EC2_USER npm ci --only=production --no-optional
+          npm ci --only=production --no-optional
           
           # Generate Prisma client as the correct user
-          sudo -u \$EC2_USER npx prisma generate
+          npx prisma generate
           
           # Create systemd service file if it doesn't exist
           sudo tee /etc/systemd/system/backend-app.service > /dev/null << SERVICEEOF
