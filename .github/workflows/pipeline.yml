@@ -1,0 +1,173 @@
+name: Backend Pipeline
+
+on:
+  push:
+    branches:
+      - '**'
+    paths-ignore:
+      - 'frontend/**'
+      - 'README.md'
+      - 'LICENSE.md'
+
+jobs:
+  test:
+    name: Run Backend Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+          
+      - name: Install dependencies
+        working-directory: ./backend
+        run: npm ci
+        
+      - name: Run tests
+        working-directory: ./backend
+        run: npm test
+        
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results
+          path: backend/coverage/
+          retention-days: 7
+
+  build:
+    name: Build Backend
+    runs-on: ubuntu-latest
+    needs: test
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+          
+      - name: Install dependencies
+        working-directory: ./backend
+        run: npm ci
+        
+      - name: Generate Prisma client
+        working-directory: ./backend
+        run: npm run prisma:generate
+        
+      - name: Build application
+        working-directory: ./backend
+        run: npm run build
+        
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-build
+          path: backend/dist/
+          retention-days: 1
+
+  deploy:
+    name: Deploy to EC2
+    runs-on: ubuntu-latest
+    needs: [test, build]
+    if: github.event_name == 'push' && github.ref != 'refs/heads/main'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-build
+          path: backend/dist/
+          
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+          
+      - name: Install dependencies
+        working-directory: ./backend
+        run: npm ci --only=production
+        
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-2
+          
+      - name: Create SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_PRIVATE_KEY }}" > ~/.ssh/ec2_key
+          chmod 600 ~/.ssh/ec2_key
+          
+      - name: Deploy to EC2
+        env:
+          EC2_INSTANCE: ${{ secrets.EC2_INSTANCE }}
+          EC2_USER: ${{ secrets.EC2_USER }}
+        run: |
+          # Create deployment script
+          cat > deploy.sh << 'EOF'
+          #!/bin/bash
+          set -e
+          
+          # Stop the current application
+          sudo systemctl stop backend-app || true
+          
+          # Create backup of current version
+          sudo cp -r /opt/backend /opt/backend.backup.$(date +%Y%m%d_%H%M%S) || true
+          
+          # Copy new files
+          sudo rm -rf /opt/backend
+          sudo mkdir -p /opt/backend
+          sudo cp -r * /opt/backend/
+          
+          # Set proper permissions
+          sudo chown -R $EC2_USER:$EC2_USER /opt/backend
+          sudo chmod +x /opt/backend/dist/index.js
+          
+          # Install production dependencies
+          cd /opt/backend
+          npm ci --only=production
+          
+          # Generate Prisma client
+          npx prisma generate
+          
+          # Start the application
+          sudo systemctl start backend-app
+          
+          # Check if service is running
+          sudo systemctl is-active --quiet backend-app
+          if [ $? -eq 0 ]; then
+            echo "Deployment successful!"
+          else
+            echo "Deployment failed! Rolling back..."
+            sudo systemctl stop backend-app
+            sudo rm -rf /opt/backend
+            sudo mv /opt/backend.backup.* /opt/backend
+            sudo systemctl start backend-app
+            exit 1
+          fi
+          EOF
+          
+          # Copy files to EC2
+          scp -i ~/.ssh/ec2_key -o StrictHostKeyChecking=no -r backend/* $EC2_USER@$EC2_INSTANCE:/tmp/backend/
+          scp -i ~/.ssh/ec2_key -o StrictHostKeyChecking=no deploy.sh $EC2_USER@$EC2_INSTANCE:/tmp/
+          
+          # Execute deployment
+          ssh -i ~/.ssh/ec2_key -o StrictHostKeyChecking=no $EC2_USER@$EC2_INSTANCE "chmod +x /tmp/deploy.sh && cd /tmp/backend && /tmp/deploy.sh"
