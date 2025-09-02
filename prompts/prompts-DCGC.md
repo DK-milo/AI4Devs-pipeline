@@ -45,7 +45,7 @@ Crea un job de GitHub Actions para generar el build de un backend Node.js/TypeSc
 Crea un job de GitHub Actions para desplegar un backend Node.js en EC2 que:
 - Se ejecute solo en pushes a ramas (no main/master)
 - Dependa de los jobs de test y build
-- Use las siguientes secrets: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION, EC2_INSTANCE, EC2_USER, EC2_PRIVATE_KEY
+- Use las siguientes secrets: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, EC2_INSTANCE, EC2_USER, EC2_PRIVATE_KEY
 - Configure credenciales de AWS
 - Copie los archivos compilados al servidor EC2
 - Instale dependencias de producción
