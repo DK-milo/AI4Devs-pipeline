@@ -116,13 +116,13 @@ jobs:
           echo "${{ secrets.EC2_PRIVATE_KEY }}" > ~/.ssh/ec2_key
           chmod 600 ~/.ssh/ec2_key
           
-      - name: Deploy to EC2
+                   - name: Deploy to EC2
         env:
           EC2_INSTANCE: ${{ secrets.EC2_INSTANCE }}
           EC2_USER: ${{ secrets.EC2_USER }}
         run: |
           # Create deployment script
-          cat > deploy.sh << 'EOF'
+          cat > deploy.sh << EOF
           #!/bin/bash
           set -e
           
@@ -131,7 +131,7 @@ jobs:
           
           # Create backup of current version if it exists
           if [ -d "/opt/backend" ]; then
-            sudo cp -r /opt/backend /opt/backend.backup.$(date +%Y%m%d_%H%M%S) || true
+            sudo cp -r /opt/backend /opt/backend.backup.\$(date +%Y%m%d_%H%M%S) || true
           fi
           
           # Remove old backend directory if it exists
@@ -139,31 +139,31 @@ jobs:
           
           # Create new backend directory with proper ownership
           sudo mkdir -p /opt/backend
-          sudo chown $EC2_USER:$EC2_USER /opt/backend
+          sudo chown \$EC2_USER:\$EC2_USER /opt/backend
           
           # Copy new files
           sudo cp -r * /opt/backend/
           
           # Set proper permissions for all files
-          sudo chown -R $EC2_USER:$EC2_USER /opt/backend
+          sudo chown -R \$EC2_USER:\$EC2_USER /opt/backend
           sudo chmod +x /opt/backend/dist/index.js 2>/dev/null || true
           
           # Install production dependencies as the correct user
           cd /opt/backend
-          sudo -u $EC2_USER npm ci --only=production --no-optional
+          sudo -u \$EC2_USER npm ci --only=production --no-optional
           
           # Generate Prisma client as the correct user
-          sudo -u $EC2_USER npx prisma generate
+          sudo -u \$EC2_USER npx prisma generate
           
           # Create systemd service file if it doesn't exist
-          sudo tee /etc/systemd/system/backend-app.service > /dev/null << 'SERVICEEOF'
+          sudo tee /etc/systemd/system/backend-app.service > /dev/null << SERVICEEOF
           [Unit]
           Description=Backend Application
           After=network.target
           
           [Service]
           Type=simple
-          User=$EC2_USER
+          User=\$EC2_USER
           WorkingDirectory=/opt/backend
           ExecStart=/usr/bin/node dist/index.js
           Restart=always
@@ -201,12 +201,8 @@ jobs:
           EOF
           
           # Copy files to EC2
-          scp -i ~/.ssh/ec2_key -o StrictHostKeyChecking=no -r backend/* $EC2_USER@$EC2_INSTANCE:/tmp/backend/
-          scp -i ~/.ssh/ec2_key -o StrictHostKeyChecking=no deploy.sh $EC2_USER@$EC2_INSTANCE:/tmp/
+          scp -i ~/.ssh/ec2_key -o StrictHostKeyChecking=no -r backend/* \$EC2_USER@\$EC2_INSTANCE:/tmp/backend/
+          scp -i ~/.ssh/ec2_key -o StrictHostKeyChecking=no deploy.sh \$EC2_USER@\$EC2_INSTANCE:/tmp/
           
           # Execute deployment
-          ssh -i ~/.ssh/ec2_key -o StrictHostKeyChecking=no $EC2_USER@$EC2_INSTANCE "chmod +x /tmp/deploy.sh && cd /tmp/backend && /tmp/deploy.sh"
-           scp -i ~/.ssh/ec2_key -o StrictHostKeyChecking=no deploy.sh $EC2_USER@$EC2_INSTANCE:/tmp/
-           
-           # Execute deployment
-           ssh -i ~/.ssh/ec2_key -o StrictHostKeyChecking=no $EC2_USER@$EC2_INSTANCE "chmod +x /tmp/deploy.sh && cd /tmp/backend && /tmp/deploy.sh"
+          ssh -i ~/.ssh/ec2_key -o StrictHostKeyChecking=no \$EC2_USER@\$EC2_INSTANCE "chmod +x /tmp/deploy.sh && cd /tmp/backend && /tmp/deploy.sh"
