@@ -110,26 +110,18 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: us-east-2
           
-      - name: Create SSH key
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.EC2_PRIVATE_KEY }}" > ~/.ssh/ec2_key_temp
-          chmod 600 ~/.ssh/ec2_key_temp
-          
-          # Convert RSA key to OpenSSH format if needed
-          if grep -q "-----BEGIN RSA PRIVATE KEY-----" ~/.ssh/ec2_key_temp; then
-            echo "Converting RSA key to OpenSSH format..."
-            ssh-keygen -p -f ~/.ssh/ec2_key_temp -N "" -m pem
-            mv ~/.ssh/ec2_key_temp ~/.ssh/ec2_key
-          else
-            mv ~/.ssh/ec2_key_temp ~/.ssh/ec2_key
-          fi
-          
-          # Debug: Check the SSH key
-          echo "SSH key created successfully"
-          echo "SSH key permissions: $(ls -la ~/.ssh/ec2_key)"
-          echo "SSH key size: $(wc -c < ~/.ssh/ec2_key) bytes"
-          echo "SSH key lines: $(wc -l < ~/.ssh/ec2_key)"
+       - name: Create SSH key
+         run: |
+           mkdir -p ~/.ssh
+           echo "${{ secrets.EC2_PRIVATE_KEY }}" > ~/.ssh/ec2_key
+           chmod 600 ~/.ssh/ec2_key
+           
+           # Debug: Check the SSH key
+           echo "SSH key created successfully"
+           echo "SSH key permissions: $(ls -la ~/.ssh/ec2_key)"
+           echo "SSH key size: $(wc -c < ~/.ssh/ec2_key) bytes"
+           echo "SSH key lines: $(wc -l < ~/.ssh/ec2_key)"
+           echo "SSH key first line: $(head -1 ~/.ssh/ec2_key)"
           
       - name: Deploy to EC2
         env:
@@ -166,7 +158,12 @@ jobs:
           wc -l ~/.ssh/ec2_key
           
           # Test SSH connection with more verbose output
+          echo "Testing SSH connection with more verbose output..."
           ssh -v -i ~/.ssh/ec2_key -o StrictHostKeyChecking=no -o ConnectTimeout=10 \$EC2_USER@\$CLEAN_HOSTNAME "echo 'SSH connection successful'" 2>&1 | head -30
+          
+          # Test with different SSH options
+          echo "Testing with different SSH options..."
+          ssh -i ~/.ssh/ec2_key -o StrictHostKeyChecking=no -o ConnectTimeout=10 -o UserKnownHostsFile=/dev/null \$EC2_USER@\$CLEAN_HOSTNAME "echo 'SSH connection successful'" 2>&1 || echo "SSH test failed, but continuing..."
           
           # Create deployment script
           cat > deploy.sh << EOF
