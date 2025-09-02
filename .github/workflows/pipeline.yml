@@ -185,36 +185,61 @@ jobs:
           #!/bin/bash
           set -e
           
+          echo "Starting deployment process..."
+          
           # Stop the current application (ignore if not running)
           sudo systemctl stop backend-app 2>/dev/null || true
           
           # Create backup of current version if it exists
           if [ -d "/opt/backend" ]; then
+            echo "Creating backup of current version..."
             sudo cp -r /opt/backend /opt/backend.backup.\$(date +%Y%m%d_%H%M%S) || true
           fi
           
           # Remove old backend directory if it exists
+          echo "Removing old backend directory..."
           sudo rm -rf /opt/backend 2>/dev/null || true
           
           # Create new backend directory with proper ownership
+          echo "Creating new backend directory..."
           sudo mkdir -p /opt/backend
           sudo chown \$EC2_USER:\$EC2_USER /opt/backend
           
           # Copy new files
+          echo "Copying new files..."
           sudo cp -r * /opt/backend/
           
           # Set proper permissions for all files
+          echo "Setting proper permissions..."
           sudo chown -R \$EC2_USER:\$EC2_USER /opt/backend
           sudo chmod +x /opt/backend/dist/index.js 2>/dev/null || true
           
+          # Clean up any existing node_modules with wrong permissions
+          echo "Cleaning up any existing node_modules..."
+          sudo rm -rf /opt/backend/node_modules 2>/dev/null || true
+          
           # Install production dependencies as the correct user
+          echo "Installing production dependencies..."
           cd /opt/backend
-          npm ci --only=production --no-optional
+          
+          # Ensure we're running as the correct user
+          if [ "\$(whoami)" != "\$EC2_USER" ]; then
+            echo "Warning: Not running as \$EC2_USER, switching user for npm operations"
+            sudo -u \$EC2_USER npm ci --only=production --no-optional
+          else
+            npm ci --only=production --no-optional
+          fi
           
           # Generate Prisma client as the correct user
-          npx prisma generate
+          echo "Generating Prisma client..."
+          if [ "\$(whoami)" != "\$EC2_USER" ]; then
+            sudo -u \$EC2_USER npx prisma generate
+          else
+            npx prisma generate
+          fi
           
           # Create systemd service file if it doesn't exist
+          echo "Setting up systemd service..."
           sudo tee /etc/systemd/system/backend-app.service > /dev/null << SERVICEEOF
           [Unit]
           Description=Backend Application
@@ -234,10 +259,12 @@ jobs:
           SERVICEEOF
           
           # Reload systemd and enable service
+          echo "Reloading systemd and enabling service..."
           sudo systemctl daemon-reload
           sudo systemctl enable backend-app
           
           # Start the application
+          echo "Starting the application..."
           sudo systemctl start backend-app
           
           # Wait a moment for the service to start
